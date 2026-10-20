@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 
 TOKEN = os.getenv("BOT_TOKEN")
-print("TOKEN FROM ENV:", TOKEN)
+
 
 COIN_PACKS = [
     {"id": "pack_100", "coins": 100, "stars": 50, "name": "100 монеток"},
