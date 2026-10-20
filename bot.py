@@ -8,7 +8,6 @@ from telegram.ext import (
     PreCheckoutQueryHandler, MessageHandler, filters, ContextTypes
 )
 
-import os
 TOKEN = os.getenv("BOT_TOKEN")
 
 COIN_PACKS = [
