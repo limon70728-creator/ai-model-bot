@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import os
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
 from telegram.ext import (
@@ -7,7 +8,7 @@ from telegram.ext import (
     PreCheckoutQueryHandler, MessageHandler, filters, ContextTypes
 )
 
-TOKEN = "8932576493:AAFBZ3XgZkGZVcniLIIIvrPIO7kTzQKke-8"
+TOKEN = os.getenv("BOT_TOKEN")
 
 COIN_PACKS = [
     {"id": "pack_100", "coins": 100, "stars": 50, "name": "100 монеток"},
