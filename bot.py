@@ -1,104 +1,120 @@
-import logging
-import sqlite3
-import os
-from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
-from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler,
-    PreCheckoutQueryHandler, MessageHandler, filters, ContextTypes
-)
-from flask import Flask, request, jsonify
-import threading
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Модель</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0d0d0d;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 30px 20px 40px;
+            overflow: hidden;
+        }
+        .top { text-align: center; width: 100%; }
+        .balance { font-size: 42px; font-weight: 700; }
+        .balance span { font-size: 18px; color: #888; font-weight: 500; }
+        .subtitle { color: #666; font-size: 14px; margin-top: 4px; }
+        .tap-area { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; }
+        .coin {
+            width: 220px; height: 220px;
+            background: radial-gradient(circle at 35% 35%, #ffd700, #ffaa00 40%, #ff8c00);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 80px;
+            box-shadow: 0 0 60px rgba(255, 170, 0, 0.4), inset 0 0 30px rgba(255,255,255,0.3);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .coin:active { transform: scale(0.92); }
+        .floating {
+            position: absolute; font-size: 24px; font-weight: 700; color: #ffd700;
+            pointer-events: none; animation: floatUp 0.8s ease-out forwards;
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-80px); }
+        }
+        .bottom { width: 100%; display: flex; gap: 12px; }
+        .bottom button {
+            flex: 1; background: #1a1a1a; border: 1px solid #333; color: #fff;
+            border-radius: 14px; padding: 14px; font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="top">
+        <div class="balance"><span id="balance">...</span> <span>монеток</span></div>
+        <div class="subtitle">тапай и зарабатывай</div>
+    </div>
 
-TOKEN = os.getenv("BOT_TOKEN")
+    <div class="tap-area">
+        <div class="coin" id="coin">⭐</div>
+    </div>
 
-COIN_PACKS = [
-    {"id": "pack_100", "coins": 100, "stars": 50, "name": "100 монеток"},
-    {"id": "pack_300", "coins": 300, "stars": 120, "name": "300 монеток"},
-    {"id": "pack_1000", "coins": 1000, "stars": 350, "name": "1000 монеток"},
-]
+    <div class="bottom">
+        <button onclick="Telegram.WebApp.showAlert('Скоро')">Задания</button>
+        <button onclick="Telegram.WebApp.showAlert('Скоро')">Магазин</button>
+        <button onclick="Telegram.WebApp.showAlert('Скоро')">Купить</button>
+    </div>
 
-SHOP_ITEMS = [
-    {"id": "nude_1", "name": "Нюдс 1", "price": 80, "file_id": None},
-    {"id": "nude_2", "name": "Нюдс 2", "price": 150, "file_id": None},
-    {"id": "nude_3", "name": "Нюдс 3", "price": 250, "file_id": None},
-]
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+        const API = "https://ai-model-bot-production.up.railway.app";
+        const user = tg.initDataUnsafe.user;
+        const userId = user ? user.id : null;
+        const balanceEl = document.getElementById("balance");
+        const coin = document.getElementById("coin");
 
-# ================== БАЗА ==================
-def init_db():
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            balance INTEGER DEFAULT 0,
-            last_daily TEXT,
-            ref_by INTEGER,
-            invited INTEGER DEFAULT 0
-        )
-    """)
-    conn.commit()
-    conn.close()
+        async function loadBalance() {
+            if (!userId) return;
+            try {
+                const res = await fetch(`${API}/balance/${userId}`);
+                const data = await res.json();
+                balanceEl.textContent = data.balance;
+            } catch (e) {
+                balanceEl.textContent = "0";
+            }
+        }
 
-def get_user(user_id: int):
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-    row = c.fetchone()
-    if not row:
-        c.execute("INSERT INTO users (user_id) VALUES (?)", (user_id,))
-        conn.commit()
-        conn.close()
-        return {"user_id": user_id, "balance": 0, "last_daily": None, "ref_by": None, "invited": 0}
-    conn.close()
-    return {"user_id": row[0], "balance": row[1], "last_daily": row[2], "ref_by": row[3], "invited": row[4]}
+        async function tap() {
+            if (!userId) return;
+            try {
+                const res = await fetch(`${API}/tap`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ user_id: userId })
+                });
+                const data = await res.json();
+                balanceEl.textContent = data.balance;
 
-def update_balance(user_id: int, amount: int):
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
-    conn.commit()
-    conn.close()
+                const plus = document.createElement("div");
+                plus.className = "floating";
+                plus.textContent = "+1";
+                plus.style.left = (coin.offsetLeft + 90) + "px";
+                plus.style.top = (coin.offsetTop + 40) + "px";
+                document.body.appendChild(plus);
+                setTimeout(() => plus.remove(), 800);
 
-# ================== FLASK API ==================
-app = Flask(__name__)
+                if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+            } catch (e) {
+                console.error(e);
+            }
+        }
 
-@app.route("/balance/<int:user_id>", methods=["GET"])
-def api_get_balance(user_id):
-    user = get_user(user_id)
-    return jsonify({"balance": user["balance"]})
-
-@app.route("/tap", methods=["POST"])
-def api_tap():
-    data = request.json
-    user_id = data.get("user_id")
-    if not user_id:
-        return jsonify({"error": "no user_id"}), 400
-    update_balance(int(user_id), 1)
-    user = get_user(int(user_id))
-    return jsonify({"balance": user["balance"]})
-
-def run_flask():
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
-
-# ================== БОТ ==================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    get_user(user_id)
-    await update.message.reply_text("Бот работает. Открой приложение через кнопку меню.")
-
-def main():
-    init_db()
-    # Запускаем Flask в отдельном потоке
-    threading.Thread(target=run_flask, daemon=True).start()
-
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    print("Бот запущен...")
-    application.run_polling()
-
-if __name__ == "__main__":
-    main()
+        coin.onclick = tap;
+        loadBalance();
+    </script>
+</body>
+</html>
